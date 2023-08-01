@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">诗的时光</string>
+    <string name="nav_home">主页</string>
+    <string name="nav_read">读诗</string>
+    <string name="nav_me">我的</string>
+</resources>
