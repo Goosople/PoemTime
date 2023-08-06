@@ -1,5 +1,6 @@
 package top.goosople.poemtime
 
+import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,29 +55,50 @@ class MainActivity : ComponentActivity() {
     private lateinit var navController: NavHostController
     private lateinit var items: List<String>
     private lateinit var poems: Poem
+    private lateinit var poemSharedPreferences: SharedPreferences
+    private var bookNum = 0
+    private var poemNum = 0
+    private var verseNum = 0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize the sharedPreferences
+        poemSharedPreferences = getSharedPreferences("poem", MODE_PRIVATE)
+        // Read and deserialize the poem list from file
         poems = poemInit()
+        // Get the name of the navigation items
         items = listOf(
             this.getString(R.string.nav_home),
             this.getString(R.string.nav_read),
             this.getString(R.string.nav_me)
         )
-        setContent {
+        // Initialize poemNum
+        bookNum = poemSharedPreferences.getInt("bookNum", 0)
+        poemSharedPreferences.edit().putInt("bookNum", bookNum).apply()
+        poemNum = poemSharedPreferences.getInt("poemNum", 0)
+        poemSharedPreferences.edit().putInt("poemNum", poemNum).apply()
+        verseNum = poemSharedPreferences.getInt("verseNum", 0)
+        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+
+        setContent { // Set up the UI
             navController = rememberNavController()
             PoemTimeTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
-                    Scaffold(topBar = { TopBar(this.getString(R.string.app_name)) }, bottomBar = {
-                        BottomNavBar(items)
-                    }) { padding -> MainContent(padding) }
+                    Scaffold(topBar = { TopBar(this.getString(R.string.app_name)) },
+                        bottomBar = { BottomNavBar(items) }) { padding ->
+                        MainContent(padding)
+                    }
                 }
             }
         }
     }
 
+    /**
+     * Build the bottom navigation bar
+     * @param items names of the items
+     */
     @Composable
     fun BottomNavBar(items: List<String>) {
         var selectedItem by remember { mutableStateOf(0) }
@@ -96,12 +118,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Build the top bar
+     * @param appName The app name shown on the top bar
+     */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun TopBar(appName: String) {
         CenterAlignedTopAppBar(title = { Text(text = appName, maxLines = 1) })
     }
 
+    /**
+     * The main content of the app between top bar and bottom bar
+     * @param paddingValues the padding values given by system
+     */
     @Composable
     fun MainContent(paddingValues: PaddingValues) {
         NavHost(
@@ -115,15 +145,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // TODO: fill the content
     @Composable
     fun HomeContent(paddingValues: PaddingValues) {
     }
 
+    /**
+     * Build "Poem" tab's content
+     * @param paddingValues the padding values given by system
+     */
     @Preview
     @Composable
     fun PoemContent(paddingValues: PaddingValues = PaddingValues()) {
         var isVisible by remember { mutableStateOf(true) }
-        var poemNum by remember { mutableStateOf(1) }
+        var mVerseNum by remember { mutableStateOf(verseNum) }
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -136,8 +171,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(paddingValues),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = poems[0][0].poem[poemNum], fontSize = 36.sp)
-                    Text(text = "Goosople Song [Modern]")
+                    Text(text = poems[bookNum][poemNum].poem[mVerseNum], fontSize = 32.sp)
+                    Text(text = poems[bookNum][poemNum].detail)
                 }
             }
             Row(
@@ -169,20 +204,25 @@ class MainActivity : ComponentActivity() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Slider(
-                    value = poemNum.toFloat(),
-                    onValueChange = { newValue -> poemNum = newValue.toInt() },
-                    valueRange = 1f..1145f,
-                    modifier = Modifier.fillMaxWidth(0.75f)
+                    value = mVerseNum.toFloat() + 1, onValueChange = { newValue ->
+                        mVerseNum = newValue.toInt() - 1
+                        verseNum = mVerseNum
+                    }, valueRange = 1f..poems[bookNum][poemNum].totalNum.toFloat(), modifier = Modifier.fillMaxWidth(0.75f)
                 )
-                Text(text = "$poemNum/1145")
+                Text(text = "$mVerseNum/${poems[bookNum][poemNum].totalNum}")
             }
         }
     }
 
+    // TODO: fill the content
     @Composable
     fun MeContent(paddingValues: PaddingValues) {
     }
 
+    /**
+     * Read poem.json from the specific source (currently from raw resource)
+     * @return Poem!
+     */
     private fun poemInit() = Gson().fromJson(
         resources.openRawResource(R.raw.poem).bufferedReader().readText(), Poem::class.java
     )
