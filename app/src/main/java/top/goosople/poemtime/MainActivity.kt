@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
     private var bookNum = 0
     private var poemNum = 0
     private var verseNum = 0
+    private var finishedPoem = 0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Initialize the sharedPreferences
@@ -78,6 +80,8 @@ class MainActivity : ComponentActivity() {
         poemSharedPreferences.edit().putInt("poemNum", poemNum).apply()
         verseNum = poemSharedPreferences.getInt("verseNum", 0)
         poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+        finishedPoem = poemSharedPreferences.getInt("finishedPoem", 0)
+        poemSharedPreferences.edit().putInt("finishedPoem", finishedPoem).apply()
 
         setContent { // Set up the UI
             navController = rememberNavController()
@@ -151,7 +155,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Build "Poem" tab's content
+     * Build Poem content
      * @param paddingValues the padding values given by system
      */
     @Preview
@@ -159,6 +163,7 @@ class MainActivity : ComponentActivity() {
     fun PoemContent(paddingValues: PaddingValues = PaddingValues()) {
         var isVisible by remember { mutableStateOf(true) }
         var mVerseNum by remember { mutableStateOf(verseNum) }
+        var isFullPoemVisible by remember { mutableStateOf(true) }
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -171,7 +176,12 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(paddingValues),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = poems[bookNum][poemNum].poem[mVerseNum], fontSize = 32.sp)
+                    Text(
+                        text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
+                        else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
+                        fontSize = 32.sp,
+                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible }
+                    )
                     Text(text = poems[bookNum][poemNum].detail)
                 }
             }
@@ -182,7 +192,13 @@ class MainActivity : ComponentActivity() {
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(onClick = { /*TODO*/ }) {
+                Button(onClick = {
+                    if (mVerseNum > 0) {
+                        mVerseNum--
+                        verseNum = mVerseNum
+                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+                    }
+                }, enabled = mVerseNum > 0) {
                     Icon(Icons.Default.ChevronLeft, "Previous")
                 }
                 Button(onClick = { isVisible = !isVisible }) {
@@ -191,10 +207,26 @@ class MainActivity : ComponentActivity() {
                         "Hide/Show"
                     )
                 }
-                Button(onClick = { /*TODO*/ }) {
+                Button(onClick = {
+                    if (mVerseNum < poems[bookNum][poemNum].totalNum) {
+                        mVerseNum++
+                        verseNum = mVerseNum
+                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+                    }
+                    finishedPoem
+                }) {
                     Icon(Icons.Default.Done, "Finished")
                 }
-                Button(onClick = { /*TODO*/ }) {
+                Button(
+                    onClick = {
+                        if (mVerseNum < poems[bookNum][poemNum].totalNum) {
+                            mVerseNum++
+                            verseNum = mVerseNum
+                            poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+                        }
+                    },
+                    enabled = mVerseNum < poems[bookNum][poemNum].totalNum
+                ) {
                     Icon(Icons.Default.Redo, "Skip")
                 }
             }
@@ -204,12 +236,16 @@ class MainActivity : ComponentActivity() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Slider(
-                    value = mVerseNum.toFloat() + 1, onValueChange = { newValue ->
+                    value = mVerseNum.toFloat() + 1,
+                    onValueChange = { newValue ->
                         mVerseNum = newValue.toInt() - 1
                         verseNum = mVerseNum
-                    }, valueRange = 1f..poems[bookNum][poemNum].totalNum.toFloat(), modifier = Modifier.fillMaxWidth(0.75f)
+                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+                    },
+                    valueRange = 1f..poems[bookNum][poemNum].totalNum.toFloat(),
+                    modifier = Modifier.fillMaxWidth(0.75f)
                 )
-                Text(text = "$mVerseNum/${poems[bookNum][poemNum].totalNum}")
+                Text(text = "${mVerseNum + 1}/${poems[bookNum][poemNum].totalNum}")
             }
         }
     }
