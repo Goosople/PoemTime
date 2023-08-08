@@ -49,6 +49,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.room.Room
 import com.google.gson.Gson
 import top.goosople.poemtime.ui.theme.PoemTimeTheme
 
@@ -57,14 +58,16 @@ class MainActivity : ComponentActivity() {
     private lateinit var items: List<String>
     private lateinit var poems: Poem
     private lateinit var poemSharedPreferences: SharedPreferences
+    private lateinit var dbDao: VerseDao
     private var bookNum = 0
     private var poemNum = 0
     private var verseNum = 0
-    private var finishedPoem = 0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Initialize the sharedPreferences
         poemSharedPreferences = getSharedPreferences("poem", MODE_PRIVATE)
+        // Initialize database
+        dbDao = Room.databaseBuilder(this, Database::class.java, "poem").build().verseDao()
         // Read and deserialize the poem list from file
         poems = poemInit()
         // Get the name of the navigation items
@@ -80,8 +83,6 @@ class MainActivity : ComponentActivity() {
         poemSharedPreferences.edit().putInt("poemNum", poemNum).apply()
         verseNum = poemSharedPreferences.getInt("verseNum", 0)
         poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-        finishedPoem = poemSharedPreferences.getInt("finishedPoem", 0)
-        poemSharedPreferences.edit().putInt("finishedPoem", finishedPoem).apply()
 
         setContent { // Set up the UI
             navController = rememberNavController()
@@ -176,12 +177,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(paddingValues),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
-                        else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
+                    Text(text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
+                    else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
                         fontSize = 32.sp,
-                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible }
-                    )
+                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible })
                     Text(text = poems[bookNum][poemNum].detail)
                 }
             }
@@ -212,8 +211,9 @@ class MainActivity : ComponentActivity() {
                         mVerseNum++
                         verseNum = mVerseNum
                         poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+                        if (dbDao.update(Verse(bookNum, poemNum, verseNum, true)) == 0)
+                            dbDao.insert(Verse(bookNum, poemNum, verseNum, true))
                     }
-                    finishedPoem
                 }) {
                     Icon(Icons.Default.Done, "Finished")
                 }
@@ -224,8 +224,7 @@ class MainActivity : ComponentActivity() {
                             verseNum = mVerseNum
                             poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
                         }
-                    },
-                    enabled = mVerseNum < poems[bookNum][poemNum].totalNum
+                    }, enabled = mVerseNum < poems[bookNum][poemNum].totalNum
                 ) {
                     Icon(Icons.Default.Redo, "Skip")
                 }
