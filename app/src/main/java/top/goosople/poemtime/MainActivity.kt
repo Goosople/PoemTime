@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,7 +44,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -51,7 +54,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.room.Room
 import com.google.gson.Gson
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import top.goosople.poemtime.ui.theme.PoemTimeTheme
+import kotlin.math.log10
 
 class MainActivity : ComponentActivity() {
     private lateinit var navController: NavHostController
@@ -153,6 +159,15 @@ class MainActivity : ComponentActivity() {
     // TODO: fill the content
     @Composable
     fun HomeContent(paddingValues: PaddingValues) {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)) {
+            poems.forEachIndexed { index, poemItems ->
+                Button(onClick = { /*TODO*/ }, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = "$index ${poems.bookNames[index]}")
+                }
+            }
+        }
     }
 
     /**
@@ -169,7 +184,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceEvenly,
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             AnimatedVisibility(visible = isVisible) {
@@ -177,10 +192,17 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(paddingValues),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
-                    else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
-                        fontSize = 32.sp,
-                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible })
+                    Text(
+                        text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
+                        else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
+                        fontSize = (45 - 15 * log10(
+                            (if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
+                            else poems[bookNum][poemNum].poem[mVerseNum][0].toString()).length + 5f
+                        )).toInt().sp,
+                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible },
+                        lineHeight = 1.2.em,
+                        textAlign = TextAlign.Center
+                    )
                     Text(text = poems[bookNum][poemNum].detail)
                 }
             }
@@ -207,24 +229,28 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 Button(onClick = {
-                    if (mVerseNum < poems[bookNum][poemNum].totalNum) {
+                    if (mVerseNum < poems[bookNum][poemNum].totalNum - 1) {
                         mVerseNum++
                         verseNum = mVerseNum
                         poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-                        if (dbDao.update(Verse(bookNum, poemNum, verseNum, true)) == 0)
-                            dbDao.insert(Verse(bookNum, poemNum, verseNum, true))
+                        GlobalScope.launch {
+                            if (dbDao.update(
+                                    Verse(bookNum, poemNum, verseNum, true)
+                                ) == 0
+                            ) dbDao.insert(Verse(bookNum, poemNum, verseNum, true))
+                        }
                     }
                 }) {
                     Icon(Icons.Default.Done, "Finished")
                 }
                 Button(
                     onClick = {
-                        if (mVerseNum < poems[bookNum][poemNum].totalNum) {
+                        if (mVerseNum < poems[bookNum][poemNum].totalNum - 1) {
                             mVerseNum++
                             verseNum = mVerseNum
                             poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
                         }
-                    }, enabled = mVerseNum < poems[bookNum][poemNum].totalNum
+                    }, enabled = mVerseNum < poems[bookNum][poemNum].totalNum - 1
                 ) {
                     Icon(Icons.Default.Redo, "Skip")
                 }
