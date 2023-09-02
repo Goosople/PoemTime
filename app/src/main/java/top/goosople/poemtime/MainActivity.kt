@@ -1,28 +1,21 @@
 package top.goosople.poemtime
 
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
@@ -34,30 +27,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.room.Room
 import com.google.gson.Gson
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import top.goosople.poemtime.ui.theme.PoemTimeTheme
-import kotlin.math.log10
 
 class MainActivity : ComponentActivity() {
     private lateinit var navController: NavHostController
@@ -84,11 +70,13 @@ class MainActivity : ComponentActivity() {
         )
         // Initialize poemNum
         bookNum = poemSharedPreferences.getInt("bookNum", 0)
-        poemSharedPreferences.edit().putInt("bookNum", bookNum).apply()
         poemNum = poemSharedPreferences.getInt("poemNum", 0)
-        poemSharedPreferences.edit().putInt("poemNum", poemNum).apply()
         verseNum = poemSharedPreferences.getInt("verseNum", 0)
-        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
+        poemSharedPreferences.edit {
+            putInt("bookNum", bookNum)
+            putInt("poemNum", poemNum)
+            putInt("verseNum", verseNum)
+        }
 
         setContent { // Set up the UI
             navController = rememberNavController()
@@ -112,19 +100,33 @@ class MainActivity : ComponentActivity() {
      */
     @Composable
     fun BottomNavBar(items: List<String>) {
-        var selectedItem by remember { mutableStateOf(0) }
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = navBackStackEntry?.destination
         val icons = listOf(Icons.Outlined.Home, Icons.Outlined.MenuBook, Icons.Outlined.Person)
         val selectedIcons = listOf(Icons.Default.Home, Icons.Default.MenuBook, Icons.Default.Person)
         NavigationBar {
             items.forEachIndexed { index, item ->
                 NavigationBarItem(icon = {
-                    Icon(
-                        if (selectedItem == index) selectedIcons[index] else icons[index], null
-                    )
+                    Icon(if (currentDestination?.hierarchy?.any { it.route == item } == true) selectedIcons[index] else icons[index],
+                        null)
                 },
                     label = { Text(item) },
-                    selected = selectedItem == index,
-                    onClick = { selectedItem = index; navController.navigate(items[index]) })
+                    selected = currentDestination?.hierarchy?.any { it.route == item } == true,
+                    onClick = {
+                        navController.navigate(items[index]) {
+                            // Pop up to the start destination of the graph to
+                            // avoid building up a large stack of destinations
+                            // on the back stack as users select items
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            // Avoid multiple copies of the same destination
+                            // when reselecting the same item
+                            launchSingleTop = true
+                            // Restore state when reselecting a previously selected item
+                            restoreState = true
+                        }
+                    })
             }
         }
     }
@@ -159,118 +161,38 @@ class MainActivity : ComponentActivity() {
     // TODO: fill the content
     @Composable
     fun HomeContent(paddingValues: PaddingValues) {
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)) {
-            poems.forEachIndexed { index, poemItems ->
-                Button(onClick = { /*TODO*/ }, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = "$index ${poems.bookNames[index]}")
-                }
-            }
-        }
+
     }
 
     /**
      * Build Poem content
      * @param paddingValues the padding values given by system
      */
-    @Preview
+    @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
     @Composable
     fun PoemContent(paddingValues: PaddingValues = PaddingValues()) {
-        var isVisible by remember { mutableStateOf(true) }
-        var mVerseNum by remember { mutableStateOf(verseNum) }
-        var isFullPoemVisible by remember { mutableStateOf(true) }
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            AnimatedVisibility(visible = isVisible) {
-                Column(
-                    modifier = Modifier.padding(paddingValues),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
-                        else poems[bookNum][poemNum].poem[mVerseNum][0].toString(),
-                        fontSize = (45 - 15 * log10(
-                            (if (isFullPoemVisible) poems[bookNum][poemNum].poem[mVerseNum]
-                            else poems[bookNum][poemNum].poem[mVerseNum][0].toString()).length + 5f
-                        )).toInt().sp,
-                        modifier = Modifier.clickable { isFullPoemVisible = !isFullPoemVisible },
-                        lineHeight = 1.2.em,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(text = poems[bookNum][poemNum].detail)
-                }
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            poems.forEachIndexed { index, poemItems ->
+                stickyHeader { Text(text = "$index ${poems.bookNames[index]}") }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(paddingValues),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(onClick = {
-                    if (mVerseNum > 0) {
-                        mVerseNum--
-                        verseNum = mVerseNum
-                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-                    }
-                }, enabled = mVerseNum > 0) {
-                    Icon(Icons.Default.ChevronLeft, "Previous")
-                }
-                Button(onClick = { isVisible = !isVisible }) {
-                    Icon(
-                        if (isVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        "Hide/Show"
-                    )
-                }
-                Button(onClick = {
-                    if (mVerseNum < poems[bookNum][poemNum].totalNum - 1) {
-                        mVerseNum++
-                        verseNum = mVerseNum
-                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-                        GlobalScope.launch {
-                            if (dbDao.update(
-                                    Verse(bookNum, poemNum, verseNum, true)
-                                ) == 0
-                            ) dbDao.insert(Verse(bookNum, poemNum, verseNum, true))
+            item {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                ) {
+                    poems.forEachIndexed { index, poemItems ->
+                        Button(onClick = {
+                            val intent = Intent(this@MainActivity, PoemActivity::class.java)
+                            intent.putExtra("bookNum", bookNum)
+                            intent.putExtra("poemNum", poemNum)
+                            intent.putExtra("verseNum", verseNum)
+                            startActivity(intent)
+                        }) {
+                            Text(text = "$index ${poems.bookNames[index]}")
                         }
                     }
-                }) {
-                    Icon(Icons.Default.Done, "Finished")
                 }
-                Button(
-                    onClick = {
-                        if (mVerseNum < poems[bookNum][poemNum].totalNum - 1) {
-                            mVerseNum++
-                            verseNum = mVerseNum
-                            poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-                        }
-                    }, enabled = mVerseNum < poems[bookNum][poemNum].totalNum - 1
-                ) {
-                    Icon(Icons.Default.Redo, "Skip")
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Slider(
-                    value = mVerseNum.toFloat() + 1,
-                    onValueChange = { newValue ->
-                        mVerseNum = newValue.toInt() - 1
-                        verseNum = mVerseNum
-                        poemSharedPreferences.edit().putInt("verseNum", verseNum).apply()
-                    },
-                    valueRange = 1f..poems[bookNum][poemNum].totalNum.toFloat(),
-                    modifier = Modifier.fillMaxWidth(0.75f)
-                )
-                Text(text = "${mVerseNum + 1}/${poems[bookNum][poemNum].totalNum}")
             }
         }
     }
@@ -288,4 +210,8 @@ class MainActivity : ComponentActivity() {
         resources.openRawResource(R.raw.poem).bufferedReader().readText(), Poem::class.java
     )
 
+    @Preview
+    @Composable
+    fun PreviewContent() {
+    }
 }
